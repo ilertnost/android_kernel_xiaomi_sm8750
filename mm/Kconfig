@@ -1257,6 +1257,18 @@ config IO_MAPPING
 config MEMFD_CREATE
 	bool "Enable memfd_create() system call" if EXPERT
 
+config MEMFD_ASHMEM_SHIM
+	bool "Enable an ashmem compatibility shim on memfd files"
+	depends on MEMFD_CREATE
+	default y
+	help
+	  Enable a Qualcomm-style compatibility layer that services ashmem-style
+	  ioctls on memfd/shmem files by converting them into memfd seal fcntl
+	  operations. Some Android V runtimes (ART/jit) issue ashmem ioctls on
+	  memfd-backed files; without this shim those calls return -ENOTTY.
+	  Hooked into shmem_file_operations.unlocked_ioctl/compat_ioctl.
+
+
 # Some architectures want callbacks for all IO mappings in order to
 # track the physical addresses that get used as devices.
 config ARCH_HAS_IOREMAP_PHYS_HOOKS

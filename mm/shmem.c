@@ -80,6 +80,7 @@ static struct vfsmount *shm_mnt;
 #include <linux/syscalls.h>
 #include <linux/fcntl.h>
 #include <uapi/linux/memfd.h>
+#include <linux/memfd.h>
 #include <linux/rmap.h>
 #include <linux/uuid.h>
 #include <linux/quotaops.h>
@@ -4504,6 +4505,10 @@ static const struct file_operations shmem_file_operations = {
 	.splice_read	= shmem_file_splice_read,
 	.splice_write	= iter_file_splice_write,
 	.fallocate	= shmem_fallocate,
+#endif
+#ifdef CONFIG_MEMFD_ASHMEM_SHIM
+	.unlocked_ioctl	= memfd_ashmem_shim_ioctl,
+	.compat_ioctl	= memfd_ashmem_shim_compat_ioctl,
 #endif
 };
 

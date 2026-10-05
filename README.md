@@ -5,7 +5,7 @@ Custom GKI kernel for the **Xiaomi 15** (codename `dada`, SM8750 / Snapdragon 8 
 Builds against Google's Android Generic Kernel Image **6.6.139** (branch `android15-6.6`)
 and runs the device's **stock vendor modules unmodified**.
 
-Flavour: `v0.1 (Prototype)`
+Flavour: `v0.2 (Experimental)` — see [What v0.2 adds](#what-v02-adds)
 
 ---
 
@@ -82,9 +82,9 @@ repo sync -c --no-clone-bundle --no-tags --optimized-fetch --prune -j"$(nproc)"
 
 # point 'common' at this repository
 git -C common remote remove origin
-git -C common remote add origin https://github.com/ilertnost/android_kernel_xiaomi_sm8750.git
-git -C common fetch origin apex-foundry
-git -C common checkout apex-foundry
+git -C common remote add origin https://github.com/ilertnost/android_kernel_google_sm8750.git
+git -C common fetch origin v0.2-exp
+git -C common checkout v0.2-exp
 
 mkdir -p dist ~/.cache/bazel
 
@@ -103,8 +103,11 @@ later builds are incremental through the bazel disk cache.
 
 ```bash
 strings dist/Image | grep -m1 '^Linux version'
-# 6.6.139-android15-8-maybe-dirty-4k-APEX-Foundry-v0.1-Prototype
+# 6.6.139-android15-8-maybe-dirty-4k-APEX-Foundry-v0.2-Exp
 ```
+
+`UTS_RELEASE` is capped at 64 characters by the kernel build, which is why the
+tag is abbreviated to `v0.2-Exp` rather than `v0.2-Experimental`.
 
 ## Flashing
 
@@ -122,16 +125,46 @@ adb shell ls /sys/class/bluetooth/               # expect hci0
 adb shell 'ip -br link | grep wlan'               # expect wlan0
 ```
 
+## What v0.2 adds
+
+Two optional feature sets on top of the working v0.1 base. Nothing about the
+KMI fix changes, and the vendor modules are still untouched.
+
+**Performance — 23 patches.** Memory and scheduler hot paths, `memcmp` and
+`int_sqrt`, cache pressure, F2FS congestion, ext4 commit age, wakeup
+behaviour, and two patches that quiet kernel log spam.
+
+One of the 24 candidate patches, `clear_page_16bytes_align`, is **not**
+included: it targets the 6.7-era `arch/arm64/lib/clear_page.S` and its single
+hunk does not apply to 6.6.139. See `apex-patches/README.md`.
+
+**Droidspaces.** The `sysvipc` KABI fix and the ghost-task NULL check, plus the
+seven config options the container runtime needs (`CONFIG_SYSVIPC`,
+`CONFIG_DEVTMPFS`, `CONFIG_PID_NS`, `CONFIG_POSIX_MQUEUE`, and three
+`CONFIG_NETFILTER_XT_*`).
+
+Both are verified on device: audio, Bluetooth, WLAN and charging still work,
+and Droidspaces runs.
+
+KernelSU-Next and SUSFS are **not** in this branch. Both were attempted and
+reverted; the built `Image` contains zero references to either. The reason is
+recorded in `apex-patches/README.md` — briefly, KernelSU-Next's `setup.sh`
+expects a tag or commit, and passing a branch name pulls a moving tip, which
+breaks the third-party SUSFS patches.
+
 ## Versioning
 
-`v0.1 (Prototype)` — boots, vendor modules load, all hardware working.
-`v0.2 (Experimental)` and later add optional features.
+| Flavour | State |
+|---|---|
+| `v0.1 (Prototype)` | Boots, vendor modules load, all hardware working. |
+| `v0.2 (Experimental)` | Adds the optimizations and Droidspaces above. |
 
 ## Layout
 
 | Branch | Contents |
 |---|---|
-| `apex-foundry` | This history: GKI base plus the changes above. |
+| `v0.2-exp` | Current. GKI base, KMI fix, optimizations, Droidspaces. |
+| `apex-foundry-v0.1-prot` | The working base, before optional features. |
 | `android15-6.6-dada` | Full upstream GKI history, kept for reference. |
 
 ## Acknowledgements
@@ -139,6 +172,8 @@ adb shell 'ip -br link | grep wlan'               # expect wlan0
 - Google, for Android GKI (`kernel/common`, branch `android15-6.6`)
 - AnyKernel3 by osm0sis
 - The community GKI build workflows this approach follows
+- The optimization and Droidspaces patch authors, whose patches are recorded
+  verbatim in `apex-patches/`
 
 ## Licence
 

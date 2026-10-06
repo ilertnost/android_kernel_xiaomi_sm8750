@@ -82,7 +82,7 @@ repo sync -c --no-clone-bundle --no-tags --optimized-fetch --prune -j"$(nproc)"
 
 # point 'common' at this repository
 git -C common remote remove origin
-git -C common remote add origin https://github.com/ilertnost/android_kernel_google_sm8750.git
+git -C common remote add origin https://github.com/ilertnost/android_kernel_xiaomi_sm8750.git
 git -C common fetch origin v0.2-exp
 git -C common checkout v0.2-exp
 

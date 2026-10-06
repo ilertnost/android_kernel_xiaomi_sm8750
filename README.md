@@ -5,7 +5,7 @@ Custom GKI kernel for the **Xiaomi 15** (codename `dada`, SM8750 / Snapdragon 8 
 Builds against Google's Android Generic Kernel Image **6.6.139** (branch `android15-6.6`)
 and runs the device's **stock vendor modules unmodified**.
 
-Flavour: `v0.2 (Experimental)` — see [What v0.2 adds](#what-v02-adds)
+Flavour: `v1.0 (Tempered)` — SukiSU Ultra and SUSFS built in
 
 ---
 
@@ -103,11 +103,23 @@ later builds are incremental through the bazel disk cache.
 
 ```bash
 strings dist/Image | grep -m1 '^Linux version'
-# 6.6.139-android15-8-maybe-dirty-4k-APEX-Foundry-v0.2-Exp
+# 6.6.139-android15-8-maybe-dirty-4k-APEX-Foundry-v1.0-Tempered
 ```
 
-`UTS_RELEASE` is capped at 64 characters by the kernel build, which is why the
-tag is abbreviated to `v0.2-Exp` rather than `v0.2-Experimental`.
+`UTS_RELEASE` is capped at 64 characters by the kernel build. `v1.0-Tempered`
+fits at 61; the longer `v0.2-Experimental` did not, which is why that build
+shipped abbreviated as `v0.2-Exp`.
+
+SukiSU Ultra is not vendored in this repository. Fetch it at its pinned commit:
+
+```bash
+curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/builtin/kernel/setup.sh" \
+  | bash -s 70fa0e092a2c81060823f8ae526eac14fdda2930
+```
+
+Then apply `apex-patches/sukisu-ultra/sukisu_apex_fixes.patch` and restore
+`apex-patches/sukisu-ultra/arch.h`. Full steps are in
+`apex-patches/sukisu-ultra/README.md`.
 
 ## Flashing
 
@@ -125,10 +137,29 @@ adb shell ls /sys/class/bluetooth/               # expect hci0
 adb shell 'ip -br link | grep wlan'               # expect wlan0
 ```
 
-## What v0.2 adds
+## Root and stealth
 
-Two optional feature sets on top of the working v0.1 base. Nothing about the
-KMI fix changes, and the vendor modules are still untouched.
+**SukiSU Ultra**, built into the kernel, plus **SUSFS v2.3.0**. No module to
+install and no boot image patch — `uname -r` reports `APEX-Foundry-v1.0-Tempered`
+and the manager talks to it directly.
+
+SukiSU's `builtin` branch carries its own ten `CONFIG_KSU_SUSFS_*` symbols, so
+no external patch is required. That is why it is used instead of KernelSU-Next,
+which keeps SUSFS out of tree and needs third-party patches tied to one exact
+upstream commit.
+
+Pinned to `70fa0e092a2c81060823f8ae526eac14fdda2930`. The branch carries no
+release tag — every tag lives on `main` and none is an ancestor of `builtin`, so
+a tag would drop the GKI integration. The commit is pinned instead.
+
+Three upstream defects had to be fixed to make that commit compile; they are
+documented with error messages in `apex-patches/sukisu-ultra/FIXES.md`.
+
+`UTS_RELEASE` is capped at 64 characters, so the reported tag is the full
+`v1.0-Tempered` while the management app shows `40959`, derived by SukiSU from
+its own commit count.
+
+## Performance and Droidspaces
 
 **Performance — 23 patches.** Memory and scheduler hot paths, `memcmp` and
 `int_sqrt`, cache pressure, F2FS congestion, ext4 commit age, wakeup
@@ -143,29 +174,36 @@ seven config options the container runtime needs (`CONFIG_SYSVIPC`,
 `CONFIG_DEVTMPFS`, `CONFIG_PID_NS`, `CONFIG_POSIX_MQUEUE`, and three
 `CONFIG_NETFILTER_XT_*`).
 
-Both are verified on device: audio, Bluetooth, WLAN and charging still work,
-and Droidspaces runs.
-
-KernelSU-Next and SUSFS are **not** in this branch. Both were attempted and
-reverted; the built `Image` contains zero references to either. The reason is
-recorded in `apex-patches/README.md` — briefly, KernelSU-Next's `setup.sh`
-expects a tag or commit, and passing a branch name pulls a moving tip, which
-breaks the third-party SUSFS patches.
-
 ## Versioning
 
-| Flavour | State |
+Three maturity stages, named for what changes between them:
+
+| Flavour | Meaning |
 |---|---|
-| `v0.1 (Prototype)` | Boots, vendor modules load, all hardware working. |
-| `v0.2 (Experimental)` | Adds the optimizations and Droidspaces above. |
+| `v0.1 (Prototype)` | Working model, rough edges expected. |
+| `v0.2 (Experimental)` | Features on trial, behaviour may change. |
+| `v1.0 (Tempered)` | Hardened by testing, for daily use. |
+
+## Known cosmetic issue
+
+The management app reports a version mismatch against the kernel. The app ships
+from SukiSU's `module_repository` and checks against its own version, while this
+kernel pins a specific commit rather than tracking the branch tip. The interface
+is compatible — root, SUSFS and the manager all function — so only the version
+number disagrees. It resolves when the app is updated upstream.
 
 ## Layout
 
 | Branch | Contents |
 |---|---|
-| `v0.2-exp` | Current. GKI base, KMI fix, optimizations, Droidspaces. |
+| `v0.2-exp` | Current. KMI fix, optimizations, Droidspaces, SukiSU Ultra, SUSFS. |
 | `apex-foundry-v0.1-prot` | The working base, before optional features. |
 | `android15-6.6-dada` | Full upstream GKI history, kept for reference. |
+
+## Status
+
+Verified on device: audio, Bluetooth, WLAN, charging and Droidspaces all work,
+and SukiSU Ultra with SUSFS is stable.
 
 ## Acknowledgements
 

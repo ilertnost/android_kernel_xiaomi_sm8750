@@ -83,8 +83,8 @@ repo sync -c --no-clone-bundle --no-tags --optimized-fetch --prune -j"$(nproc)"
 # point 'common' at this repository
 git -C common remote remove origin
 git -C common remote add origin https://github.com/ilertnost/android_kernel_xiaomi_sm8750.git
-git -C common fetch origin v0.2-exp
-git -C common checkout v0.2-exp
+git -C common fetch origin lineage-23.2
+git -C common checkout lineage-23.2
 
 mkdir -p dist ~/.cache/bazel
 
@@ -192,11 +192,28 @@ kernel pins a specific commit rather than tracking the branch tip. The interface
 is compatible — root, SUSFS and the manager all function — so only the version
 number disagrees. It resolves when the app is updated upstream.
 
+## Branch naming
+
+The branch is named after the Android platform the kernel targets, using the
+LineageOS convention, not after the GKI branch it is developed on. The two are
+different things:
+
+- GKI source branch: `common-android15-6.6`. This records that Google developed
+  the 6.6 kernel train during the Android 15 timeframe. It says nothing about
+  which Android the kernel runs on, and `uname -r` will keep reporting
+  `android15-8` regardless.
+- Target platform: Android 16, hence `lineage-23.2`. The patches taken from
+  the community build workflows are written against 23.0-23.2, and Android 16
+  is what has been verified on device.
+
+Kernel version string stays `APEX-Foundry-v1.0-Tempered`; the two numbering
+schemes are independent and never mixed.
+
 ## Layout
 
 | Branch | Contents |
 |---|---|
-| `v0.2-exp` | Current. KMI fix, optimizations, Droidspaces, SukiSU Ultra, SUSFS. |
+| `lineage-23.2` | Current. KMI fix, optimizations, Droidspaces, SukiSU Ultra, SUSFS. |
 | `apex-foundry-v0.1-prot` | The working base, before optional features. |
 | `android15-6.6-dada` | Full upstream GKI history, kept for reference. |
 

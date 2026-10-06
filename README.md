@@ -60,8 +60,8 @@ version mismatches are still caught.
 Tested on Arch Linux. You will need:
 
 - Android `repo` tool
-- ~120 GB free disk (manifest, hermetic prebuilts, bazel cache)
-- ~30 GB RAM recommended for the first full build
+- ~30 GB free disk
+- ~16 GB RAM
 
 ```bash
 sudo pacman -S --needed git bc bison flex python ccache
@@ -70,6 +70,39 @@ curl -L https://storage.googleapis.com/git-repo-downloads/repo -o ~/bin/repo
 chmod +x ~/bin/repo
 export PATH="$HOME/bin:$PATH"
 ```
+
+### Disk, measured
+
+These are the actual figures from the reference build, not estimates:
+
+| | |
+|---|---|
+| `common/` source tree | 1.6 GB |
+| `prebuilts/` hermetic toolchain | 6.6 GB |
+| `out/` bazel output tree | 6.7 GB |
+| `dist/` packaged images | 0.7 GB |
+| **workspace total** | **~18 GB** |
+| `~/.cache/bazel` disk cache | up to ~10 GB |
+| **peak on disk** | **~28 GB** |
+
+The source tree alone is 1.6 GB. If disk is tight, the bazel disk cache is
+the part to drop or cap; the build still works, it just recompiles more.
+
+### RAM
+
+The reference build completed on a 16-core, 32 GB machine with
+`CONFIG_LTO_CLANG_THIN`. The LTO link is the peak consumer; everything else
+fits comfortably.
+
+16 GB is a practical floor for the ThinLTO configuration. Building with
+`--lto=none` needs considerably less, at the cost of the cross-module
+inlining that ThinLTO provides.
+
+Capping parallelism lowers the peak: `--jobs=N` on the bazel command line
+reduces how many compilation and link jobs run at once.
+
+> The RAM figure is a recommendation derived from the reference machine, not
+> an instrumented peak measurement. The disk figures above are measured.
 
 ## Building
 
@@ -178,6 +211,27 @@ worth roughly 3% of image size for improved cross-module inlining.
 **NTsync.** `CONFIG_NTSYNC`, the CodeWeavers driver that emulates Windows NT
 synchronization primitives. Required by Wine and Proton for correct
 semantics; a no-op for native Android applications.
+
+**ADIOS I/O scheduler.** Built in, not a module, so it is active from boot
+with no deployment step. `CONFIG_MQ_IOSCHED_ADIOS` and
+`CONFIG_MQ_IOSCHED_DEFAULT_ADIOS`. It predicts device class per I/O and
+adapts rather than applying one static policy, which suits flash storage.
+Driver by Masahito Suzuki, GPL-2.0, taken from palazik's source tree.
+
+**Unicode bypass fix.** A restructure of the `DECOMPOSE` branch in
+`utf8byte()` that checks for empty decomposition before moving the cursor
+pointers, so zero-width and similar characters no longer corrupt cursor
+state in UTF-8 normalisation. Affects the F2FS casefolding path.
+
+**Not applied: `-mcpu=oryon-1`.** It is a Qualcomm clang extension and is
+rejected by the hermetic AOSP toolchain:
+
+```
+clang: error: unsupported argument 'oryon-1' to option '-mcpu='
+```
+
+Adopting it would mean switching to a Qualcomm-flavoured clang such as
+ZyCromerZ Clang 19 and revalidating the entire build. Left out deliberately.
 
 **Droidspaces.** The `sysvipc` KABI fix and the ghost-task NULL check, plus the
 seven config options the container runtime needs (`CONFIG_SYSVIPC`,

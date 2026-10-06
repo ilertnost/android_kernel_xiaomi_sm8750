@@ -18,6 +18,33 @@ The result boots with the modules already present on the device, from
 `/vendor_dlkm` (397 modules) and `/system_dlkm` (192 modules), and audio,
 Bluetooth, WLAN, haptics and mobile data all work.
 
+### Design philosophy: MISR (Make It Simple, Reliable)
+
+Every optimization, flag and commit goes through the same audit. If it does
+not produce a measurable gain, or adds complexity the platform does not
+justify, it is dropped. Daily-driver stability and clean code outrank
+placebo commits and attractive changelogs.
+
+This has cost us things we wanted. `CONFIG_LD_DEAD_CODE_DATA_ELIMINATION` is
+present in the defconfig and is flagged `EXPERIMENTAL` upstream, with its own
+help text warning it can produce a *silently broken kernel*. It stays only
+because it has been running without incident; it is on the list to remove.
+
+It also decided the root implementation, and the reason was the only kind
+MISR accepts: the build did not work.
+
+We started on KernelSU Next and never got it to build. Fixing one error
+reliably produced two more, and each fix meant another layer of patching on
+top of a kernel we were already patching. In the chat people asked us to drop
+it for SukiSU Ultra, and the argument on offer was that SukiSU Ultra's
+Material You interface looks better. That argument we rejected, because a
+nicer interface is not a reason to change a working baseline. We moved to
+SukiSU Ultra anyway, and not for that reason: KernelSU Next would not
+compile.
+
+Once there we pinned SukiSU Ultra to a fixed commit and stopped tracking its
+branch.
+
 ## Why a change was needed
 
 Android's GKI has a KMI protection mechanism. Any **unsigned** module that
@@ -283,8 +310,24 @@ schemes are independent and never mixed.
 
 ## Status
 
-Verified on device: audio, Bluetooth, WLAN, charging and Droidspaces all work,
-and SukiSU Ultra with SUSFS is stable.
+Verified on device: audio, Bluetooth, WLAN, modem, haptics, charging and
+Droidspaces all work, and SukiSU Ultra with SUSFS is stable.
+
+Gaming results reported on HyperOS 3.0.307.0.WOCCNXM, same settings in each
+case, before and after this kernel:
+
+| Game | Before | After |
+|---|---|---|
+| Zenless Zone Zero | 40-50 fps | stable 60 fps |
+| Arknights Endfield | 60-90 fps, dropping to 40 | 90-120 fps |
+
+Frame generation is the game's own official option, used here because the
+games cap at 60 fps without it. Comparison is by feel, not by an external
+capture tool, so treat these as indicative rather than lab figures.
+
+ThinLTO, ADIOS, NTsync, the 24th optimization patch and the Unicode fix were
+added in the revision that introduced this table and are built and packaged
+but not yet soak-tested on device.
 
 ## Acknowledgements
 

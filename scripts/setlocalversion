@@ -205,4 +205,4 @@ elif [ "${LOCALVERSION+set}" != "set" ]; then
 	scm_version="$(scm_version --short)"
 fi
 
-echo "6.6.139-android15-8-maybe-dirty-4k-APEX-Foundry-v0.1-Prototype"
+echo "6.6.139-android15-8-maybe-dirty-4k-APEX-Foundry-v0.2-Exp"

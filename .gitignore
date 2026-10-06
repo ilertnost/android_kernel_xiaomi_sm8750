@@ -169,3 +169,7 @@ sphinx_*/
 
 # Rust analyzer configuration
 /rust-project.json
+
+# SukiSU Ultra is fetched by its own setup.sh; pinned, not vendored
+/KernelSU
+/drivers/kernelsu

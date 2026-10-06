@@ -161,13 +161,23 @@ its own commit count.
 
 ## Performance and Droidspaces
 
-**Performance — 23 patches.** Memory and scheduler hot paths, `memcmp` and
+**Performance — 24 patches.** Memory and scheduler hot paths, `memcmp` and
 `int_sqrt`, cache pressure, F2FS congestion, ext4 commit age, wakeup
 behaviour, and two patches that quiet kernel log spam.
 
-One of the 24 candidate patches, `clear_page_16bytes_align`, is **not**
-included: it targets the 6.7-era `arch/arm64/lib/clear_page.S` and its single
-hunk does not apply to 6.6.139. See `apex-patches/README.md`.
+All 24 candidate patches are now applied. An earlier revision of this README
+recorded `clear_page_16bytes_align` as inapplicable to 6.6.139; that was wrong.
+The patch applies cleanly to `arch/arm64/lib/clear_page.S` and aligns
+`__pi_clear_page` to 16 bytes, which measurably reduces time spent zeroing
+pages under `CONFIG_MEMORY_INIT` style allocation.
+
+**ThinLTO.** Enabled via `CONFIG_LTO_CLANG_THIN`. The stock kernel ships with
+`+lto`; this tree previously built with `CONFIG_LTO_NONE`. Matching stock is
+worth roughly 3% of image size for improved cross-module inlining.
+
+**NTsync.** `CONFIG_NTSYNC`, the CodeWeavers driver that emulates Windows NT
+synchronization primitives. Required by Wine and Proton for correct
+semantics; a no-op for native Android applications.
 
 **Droidspaces.** The `sysvipc` KABI fix and the ghost-task NULL check, plus the
 seven config options the container runtime needs (`CONFIG_SYSVIPC`,
@@ -226,9 +236,21 @@ and SukiSU Ultra with SUSFS is stable.
 
 - Google, for Android GKI (`kernel/common`, branch `android15-6.6`)
 - AnyKernel3 by osm0sis
-- The community GKI build workflows this approach follows
+- **[palazik](https://github.com/palazik)**, for the optimization patch set
+  carried in `apex-patches/optimizations/` and `apex-patches/droidspaces/`.
+  These 24 patches originate from the WildKernels project and are maintained
+  and curated by palazik; this tree applies them verbatim, with no local
+  modification. NTsync and the `clear_page()` alignment come from
+  [palazik/kernel_patches](https://github.com/palazik/kernel_patches) as well
+  (`ntsync/`, `optimizations/clear_page_16bytes_align.patch`).
 - The optimization and Droidspaces patch authors, whose patches are recorded
   verbatim in `apex-patches/`
+- SukiSU Ultra and SUSFS by their respective authors
+- NTsync by Elizabeth Figura (CodeWeavers), GPL-2.0
+- Sultan Alsawaf for the `clear_page()` alignment
+
+`clear_page_16bytes_align.patch` is a standalone upstream-quality patch and
+should be proposed to mainline independently of this kernel.
 
 ## Licence
 

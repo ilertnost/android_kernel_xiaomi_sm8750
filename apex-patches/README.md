@@ -6,13 +6,23 @@ upstream patch instead of being taken on trust.
 
 ## optimizations/
 
-23 patches from `wildkernels_patches/common/`. They are not maintained here
-and carry their original authors in the `Signed-off-by:` trailers.
+24 patches from `wildkernels_patches/common/`, maintained and curated by
+[palazik](https://github.com/palazik). They are not maintained here and carry
+their original authors in the `Signed-off-by:` trailers.
 
-`clear_page_16bytes_align.patch` is deliberately **not** included. It edits
-`arch/arm64/lib/clear_page.S`, whose layout changed between 6.6 and 6.7, so
-its only hunk does not apply to this 6.6.139 tree. The optimization it
-provides is minor and was dropped rather than forced.
+An earlier revision of this file recorded `clear_page_16bytes_align.patch` as
+excluded because `arch/arm64/lib/clear_page.S` was believed to differ between
+6.6 and 6.7. That was incorrect: the patch applies cleanly to this 6.6.139
+tree with no offset or fuzz, inserting `.p2align 4` ahead of
+`SYM_FUNC_START(__pi_clear_page)`. All 24 are now applied.
+
+## ntsync/
+
+`ntsync_base.patch` and `ntsync_compat_android15-6.6.patch`, from
+[palazik/kernel_patches](https://github.com/palazik/kernel_patches).
+NTsync emulates Windows NT synchronization primitives and is required by Wine
+and Proton. Driver by Elizabeth Figura (CodeWeavers), GPL-2.0. Enabled with
+`CONFIG_NTSYNC=y`.
 
 ## droidspaces/
 

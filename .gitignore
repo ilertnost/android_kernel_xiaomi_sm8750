@@ -38,6 +38,8 @@
 *.o
 *.o.*
 *.patch
+
+!apex-patches/**/*.patch
 *.rmeta
 *.rpm
 *.rsi

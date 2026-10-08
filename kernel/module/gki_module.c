@@ -54,6 +54,21 @@ bool gki_is_module_protected_export(const char *name)
  */
 bool gki_is_module_unprotected_symbol(const char *name)
 {
+#ifdef CONFIG_APEX_RELAX_GKI_MODULE_KMI
+	/*
+	 * Relaxed on purpose, see CONFIG_APEX_RELAX_GKI_MODULE_KMI.
+	 *
+	 * The stock modules here are built for 6.6.118 and import symbols the
+	 * 6.6.139 KMI list no longer carries. Refusing them leaves a permanent
+	 * tail of modprobe failures in the boot log for modules that are
+	 * otherwise harmless.
+	 *
+	 * Only the access check is relaxed. gki_is_module_protected_export() is
+	 * untouched, so an unsigned module still may not re-export a symbol
+	 * that belongs to a protected GKI module.
+	 */
+	return true;
+#else
 	if (NR_UNPROTECTED_SYMBOLS) {
 		return bsearch(name, gki_unprotected_symbols, NR_UNPROTECTED_SYMBOLS,
 				MAX_UNPROTECTED_NAME_LEN, cmp_name) != NULL;
@@ -65,4 +80,5 @@ bool gki_is_module_unprotected_symbol(const char *name)
 		 */
 		return true;
 	}
+#endif
 }

@@ -5,7 +5,7 @@ Custom GKI kernel for the **Xiaomi 15** (codename `dada`, SM8750 / Snapdragon 8 
 Builds against Google's Android Generic Kernel Image **6.6.139** (branch `android15-6.6`)
 and runs the device's **stock vendor modules unmodified**.
 
-Flavour: `v1.0 (Tempered)` — SukiSU Ultra and SUSFS built in
+Flavour: `v1.1` — SukiSU Ultra main, SUSFS, BORE, memfd ashmem shim, ADIOS, NTsync
 
 ---
 
@@ -17,6 +17,7 @@ No vendor source code is vendored in, and no module is rebuilt or replaced.
 The result boots with the modules already present on the device, from
 `/vendor_dlkm` (397 modules) and `/system_dlkm` (192 modules), and audio,
 Bluetooth, WLAN, haptics and mobile data all work.
+
 
 ### Design philosophy: MISR (Make It Simple, Reliable)
 
@@ -87,8 +88,8 @@ version mismatches are still caught.
 Tested on Arch Linux. You will need:
 
 - Android `repo` tool
-- ~30 GB free disk
-- ~16 GB RAM
+- ~120 GB free disk (manifest, hermetic prebuilts, bazel cache)
+- ~30 GB RAM recommended for the first full build
 
 ```bash
 sudo pacman -S --needed git bc bison flex python ccache
@@ -97,39 +98,6 @@ curl -L https://storage.googleapis.com/git-repo-downloads/repo -o ~/bin/repo
 chmod +x ~/bin/repo
 export PATH="$HOME/bin:$PATH"
 ```
-
-### Disk, measured
-
-These are the actual figures from the reference build, not estimates:
-
-| | |
-|---|---|
-| `common/` source tree | 1.6 GB |
-| `prebuilts/` hermetic toolchain | 6.6 GB |
-| `out/` bazel output tree | 6.7 GB |
-| `dist/` packaged images | 0.7 GB |
-| **workspace total** | **~18 GB** |
-| `~/.cache/bazel` disk cache | up to ~10 GB |
-| **peak on disk** | **~28 GB** |
-
-The source tree alone is 1.6 GB. If disk is tight, the bazel disk cache is
-the part to drop or cap; the build still works, it just recompiles more.
-
-### RAM
-
-The reference build completed on a 16-core, 32 GB machine with
-`CONFIG_LTO_CLANG_THIN`. The LTO link is the peak consumer; everything else
-fits comfortably.
-
-16 GB is a practical floor for the ThinLTO configuration. Building with
-`--lto=none` needs considerably less, at the cost of the cross-module
-inlining that ThinLTO provides.
-
-Capping parallelism lowers the peak: `--jobs=N` on the bazel command line
-reduces how many compilation and link jobs run at once.
-
-> The RAM figure is a recommendation derived from the reference machine, not
-> an instrumented peak measurement. The disk figures above are measured.
 
 ## Building
 
@@ -163,12 +131,41 @@ later builds are incremental through the bazel disk cache.
 
 ```bash
 strings dist/Image | grep -m1 '^Linux version'
-# 6.6.139-android15-8-maybe-dirty-4k-APEX-Foundry-v1.0-Tempered
+# 6.6.139-4k-APEX-Foundry-v1.1
 ```
 
-`UTS_RELEASE` is capped at 64 characters by the kernel build. `v1.0-Tempered`
-fits at 61; the longer `v0.2-Experimental` did not, which is why that build
-shipped abbreviated as `v0.2-Exp`.
+The version string is produced the normal way, from `CONFIG_LOCALVERSION` in
+`gki_defconfig`. Nothing overrides it and `scripts/setlocalversion` is stock.
+Verified output:
+
+```bash
+strings dist/Image | grep -m1 '^Linux version'
+# 6.6.139-android15-8-4k-APEX-Foundry-v1.1
+```
+
+Two kleaf-generated pieces go into that:
+
+- `android15-8` is `-${android_release}-${KMI_GENERATION}`, written by kleaf into
+  a `localversion` file in the source tree. `android_release` comes from the
+  workspace `BRANCH`, `KMI_GENERATION` is AOSP's GKI KMI generation. See
+  `build/kernel/kleaf/impl/stamp.bzl`, `_write_localversion`.
+- `-4k` is `CONFIG_LOCALVERSION` from `gki_defconfig`, where `-APEX-Foundry-v1.1`
+  was added.
+
+`--config=stamp` also matters. Without it, kleaf writes `-maybe-dirty` into that
+same `localversion` file instead of consulting `STABLE_SCMVERSIONS`. With it,
+`LOCALVERSION=""` is exported, which is what makes `setlocalversion` skip git, so
+the result carries no commit hash and is reproducible.
+
+Earlier builds produced a different string by replacing the final `echo` in
+`scripts/setlocalversion` with a hardcoded one. That made the reported version
+unrelated to what was built, and it spelled out `maybe-dirty` unconditionally,
+whether or not the tree was dirty. On a clean tree that was a false claim. Both
+problems are gone.
+
+`UTS_RELEASE` is capped at 64 characters, so keep `CONFIG_LOCALVERSION` well
+under that. `v1.1` fits easily; the aborted `v0.2-Experimental` did not, which
+is why that build shipped abbreviated as `v0.2-Exp`.
 
 SukiSU Ultra is not vendored in this repository. Fetch it at its pinned commit:
 
@@ -200,13 +197,19 @@ adb shell 'ip -br link | grep wlan'               # expect wlan0
 ## Root and stealth
 
 **SukiSU Ultra**, built into the kernel, plus **SUSFS v2.3.0**. No module to
-install and no boot image patch — `uname -r` reports `APEX-Foundry-v1.0-Tempered`
+install and no boot image patch — `uname -r` reports `APEX-Foundry-v1.1`
 and the manager talks to it directly.
 
+From v1.1 the root implementation comes from SukiSU Ultra's `main` branch, not
+`builtin`. `main` carries KSU UAPI 5 where `builtin` is stuck at 2, and 2 was
+what people reported as too old. SUSFS is not built in on `main`, so it comes
+from the patch set in `apex-patches/sukisu-ultra/main/`, which is upstream
+`susfs4ksu` plus five corrections documented in that directory's README.
+
 SukiSU's `builtin` branch carries its own ten `CONFIG_KSU_SUSFS_*` symbols, so
-no external patch is required. That is why it is used instead of KernelSU-Next,
-which keeps SUSFS out of tree and needs third-party patches tied to one exact
-upstream commit.
+no external patch was required there. That is why `builtin` was used through
+v1.0. KernelSU-Next keeps SUSFS out of tree and needs third-party patches tied
+to one exact upstream commit, and was never a candidate.
 
 Pinned to `70fa0e092a2c81060823f8ae526eac14fdda2930`. The branch carries no
 release tag — every tag lives on `main` and none is an ancestor of `builtin`, so
@@ -215,50 +218,20 @@ a tag would drop the GKI integration. The commit is pinned instead.
 Three upstream defects had to be fixed to make that commit compile; they are
 documented with error messages in `apex-patches/sukisu-ultra/FIXES.md`.
 
-`UTS_RELEASE` is capped at 64 characters, so the reported tag is the full
-`v1.0-Tempered` while the management app shows `40959`, derived by SukiSU from
-its own commit count.
+The reported tag is `v4.2.0-SukiSU-Ultra-42d7fda3@apexfoundry` while the
+management app shows `40959-5`, derived by SukiSU from its own commit count.
+The `5` is the KSU UAPI version and is the reason for the move to `main`; on
+`builtin` it was `2`.
 
 ## Performance and Droidspaces
 
-**Performance — 24 patches.** Memory and scheduler hot paths, `memcmp` and
+**Performance — 23 patches.** Memory and scheduler hot paths, `memcmp` and
 `int_sqrt`, cache pressure, F2FS congestion, ext4 commit age, wakeup
 behaviour, and two patches that quiet kernel log spam.
 
-All 24 candidate patches are now applied. An earlier revision of this README
-recorded `clear_page_16bytes_align` as inapplicable to 6.6.139; that was wrong.
-The patch applies cleanly to `arch/arm64/lib/clear_page.S` and aligns
-`__pi_clear_page` to 16 bytes, which measurably reduces time spent zeroing
-pages under `CONFIG_MEMORY_INIT` style allocation.
-
-**ThinLTO.** Enabled via `CONFIG_LTO_CLANG_THIN`. The stock kernel ships with
-`+lto`; this tree previously built with `CONFIG_LTO_NONE`. Matching stock is
-worth roughly 3% of image size for improved cross-module inlining.
-
-**NTsync.** `CONFIG_NTSYNC`, the CodeWeavers driver that emulates Windows NT
-synchronization primitives. Required by Wine and Proton for correct
-semantics; a no-op for native Android applications.
-
-**ADIOS I/O scheduler.** Built in, not a module, so it is active from boot
-with no deployment step. `CONFIG_MQ_IOSCHED_ADIOS` and
-`CONFIG_MQ_IOSCHED_DEFAULT_ADIOS`. It predicts device class per I/O and
-adapts rather than applying one static policy, which suits flash storage.
-Driver by Masahito Suzuki, GPL-2.0, taken from palazik's source tree.
-
-**Unicode bypass fix.** A restructure of the `DECOMPOSE` branch in
-`utf8byte()` that checks for empty decomposition before moving the cursor
-pointers, so zero-width and similar characters no longer corrupt cursor
-state in UTF-8 normalisation. Affects the F2FS casefolding path.
-
-**Not applied: `-mcpu=oryon-1`.** It is a Qualcomm clang extension and is
-rejected by the hermetic AOSP toolchain:
-
-```
-clang: error: unsupported argument 'oryon-1' to option '-mcpu='
-```
-
-Adopting it would mean switching to a Qualcomm-flavoured clang such as
-ZyCromerZ Clang 19 and revalidating the entire build. Left out deliberately.
+One of the 24 candidate patches, `clear_page_16bytes_align`, is **not**
+included: it targets the 6.7-era `arch/arm64/lib/clear_page.S` and its single
+hunk does not apply to 6.6.139. See `apex-patches/README.md`.
 
 **Droidspaces.** The `sysvipc` KABI fix and the ghost-task NULL check, plus the
 seven config options the container runtime needs (`CONFIG_SYSVIPC`,
@@ -274,14 +247,19 @@ Three maturity stages, named for what changes between them:
 | `v0.1 (Prototype)` | Working model, rough edges expected. |
 | `v0.2 (Experimental)` | Features on trial, behaviour may change. |
 | `v1.0 (Tempered)` | Hardened by testing, for daily use. |
+| `v1.1` | Adds BORE, the memfd ashmem shim, SukiSU Ultra main. See `CHANGELOG.md`. |
 
 ## Known cosmetic issue
 
-The management app reports a version mismatch against the kernel. The app ships
-from SukiSU's `module_repository` and checks against its own version, while this
-kernel pins a specific commit rather than tracking the branch tip. The interface
-is compatible — root, SUSFS and the manager all function — so only the version
-number disagrees. It resolves when the app is updated upstream.
+The management app still reports a version mismatch against the kernel. The app
+ships from SukiSU's `module_repository` and compares against its own version,
+while this kernel pins a specific commit rather than tracking the branch tip.
+The interface is compatible — root, SUSFS and the manager all function — so only
+the number disagrees. It resolves when the app is updated upstream.
+
+v1.1 moved the reported UAPI from 2 to 5, which addresses the complaint that 2
+was too old. The mismatch itself is a manager-side comparison and could not be
+removed from the kernel.
 
 ## Branch naming
 
@@ -291,14 +269,16 @@ different things:
 
 - GKI source branch: `common-android15-6.6`. This records that Google developed
   the 6.6 kernel train during the Android 15 timeframe. It says nothing about
-  which Android the kernel runs on, and `uname -r` will keep reporting
-  `android15-8` regardless.
+  which Android the kernel runs on. Its two parts do reach `uname -r` as
+  `android15-8`, but as AOSP identifiers, not as a claim about the running
+  system: `android15` is the workspace `BRANCH` and `8` is the GKI KMI
+  generation.
 - Target platform: Android 16, hence `lineage-23.2`. The patches taken from
   the community build workflows are written against 23.0-23.2, and Android 16
   is what has been verified on device.
 
-Kernel version string stays `APEX-Foundry-v1.0-Tempered`; the two numbering
-schemes are independent and never mixed.
+Kernel version string stays `APEX-Foundry-v1.1`; the two numbering schemes are
+independent and never mixed.
 
 ## Layout
 
@@ -310,44 +290,16 @@ schemes are independent and never mixed.
 
 ## Status
 
-Verified on device: audio, Bluetooth, WLAN, modem, haptics, charging and
-Droidspaces all work, and SukiSU Ultra with SUSFS is stable.
-
-Gaming results reported on HyperOS 3.0.307.0.WOCCNXM, same settings in each
-case, before and after this kernel:
-
-| Game | Before | After |
-|---|---|---|
-| Zenless Zone Zero | 40-50 fps | stable 60 fps |
-| Arknights Endfield | 60-90 fps, dropping to 40 | 90-120 fps |
-
-Frame generation is the game's own official option, used here because the
-games cap at 60 fps without it. Comparison is by feel, not by an external
-capture tool, so treat these as indicative rather than lab figures.
-
-ThinLTO, ADIOS, NTsync, the 24th optimization patch and the Unicode fix were
-added in the revision that introduced this table and are built and packaged
-but not yet soak-tested on device.
+Verified on device: audio, Bluetooth, WLAN, charging and Droidspaces all work,
+and SukiSU Ultra with SUSFS is stable.
 
 ## Acknowledgements
 
 - Google, for Android GKI (`kernel/common`, branch `android15-6.6`)
 - AnyKernel3 by osm0sis
-- **[palazik](https://github.com/palazik)**, for the optimization patch set
-  carried in `apex-patches/optimizations/` and `apex-patches/droidspaces/`.
-  These 24 patches originate from the WildKernels project and are maintained
-  and curated by palazik; this tree applies them verbatim, with no local
-  modification. NTsync and the `clear_page()` alignment come from
-  [palazik/kernel_patches](https://github.com/palazik/kernel_patches) as well
-  (`ntsync/`, `optimizations/clear_page_16bytes_align.patch`).
+- The community GKI build workflows this approach follows
 - The optimization and Droidspaces patch authors, whose patches are recorded
   verbatim in `apex-patches/`
-- SukiSU Ultra and SUSFS by their respective authors
-- NTsync by Elizabeth Figura (CodeWeavers), GPL-2.0
-- Sultan Alsawaf for the `clear_page()` alignment
-
-`clear_page_16bytes_align.patch` is a standalone upstream-quality patch and
-should be proposed to mainline independently of this kernel.
 
 ## Licence
 

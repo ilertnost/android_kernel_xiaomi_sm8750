@@ -1,2 +1,42 @@
 DEFCONFIG=gki_defconfig
 POST_DEFCONFIG_CMDS=""
+
+# Target ISA.
+#
+# The kernel had no -march at all, so clang defaulted every translation unit
+# to armv8-a. Oryon is ARMv9.2 and has these extensions in hardware.
+#
+# The baseline is armv8-a with features added, not armv9.2-a, and that is the
+# whole point. ARMv9.2 mandates SVE2, and clang acts on it rather than
+# requiring an opt-in: with -march=armv9.2-a it vectorises an ordinary float
+# loop into
+#
+#     ptrue  p0.s
+#     addvl  x11, x0, #1
+#     ld1w   { z1.s }, p0/z, [x0, x10, lsl #2]
+#     fadda  s0, p0, s0, z1.s
+#
+# which in kernel code means the kernel writing z registers it has no mandate
+# to save, trampling application SVE state on every exception entry.
+# __ARM_FEATURE_SVE and __ARM_FEATURE_SVE2 both come out defined for armv9.2-a.
+#
+# -mno-sve and -mno-sve2 are not usable as a way out: this clang rejects both
+# with "unknown argument". Disabling SVE by feature name is not available
+# either. Keeping the baseline at armv8-a is the mechanism, not a compromise.
+#
+# Verified with -dM -E that this line enables exactly DOTPROD,
+# FP16_SCALAR_ARITHMETIC, FP16_VECTOR_ARITHMETIC and MATMUL_INT8, and that
+# SVE, SVE2, BF16, SHA3, RCPC3 and LSE stay off. armv8.6-a was considered and
+# rejected: it adds BF16, which nothing here needs.
+#
+# Left out on purpose:
+#
+# -fstrict-aliasing. The top level Makefile sets -fno-strict-aliasing at line
+# 583 because several subsystems rely on non-strict aliasing. KCFLAGS is
+# appended at line 1063, so anything passed here would override that.
+#
+# -O3. CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE already gives -O2. -O3 grows the text
+# and mobile I-cache is small enough that it can measure negative.
+#
+# -fomit-frame-pointer. Already added by the top level Makefile at line 889.
+KCFLAGS="${KCFLAGS} -march=armv8-a+dotprod+fp16+i8mm"

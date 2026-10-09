@@ -147,10 +147,14 @@ static void f2fs_vip_merge_ring(struct f2fs_nm_info *nm_i)
 int f2fs_vip_insert(struct f2fs_sb_info *sbi, nid_t ino)
 {
 	struct f2fs_nm_info *nm_i = sbi->nm_info;
-	struct f2fs_vip_manager *vip = &nm_i->vip;
+	struct f2fs_vip_manager *vip;
 	unsigned long flags;
 	bool found;
 	int ret = 0;
+
+	if (!nm_i)
+		return -EOPNOTSUPP;
+	vip = &nm_i->vip;
 
 	spin_lock_irqsave(&vip->lock, flags);
 
@@ -210,10 +214,14 @@ out:
 void f2fs_vip_remove(struct f2fs_sb_info *sbi, nid_t ino)
 {
 	struct f2fs_nm_info *nm_i = sbi->nm_info;
-	struct f2fs_vip_manager *vip = &nm_i->vip;
+	struct f2fs_vip_manager *vip;
 	unsigned long flags;
 	unsigned int idx;
 	bool found;
+
+	if (!nm_i)
+		return;
+	vip = &nm_i->vip;
 
 	spin_lock_irqsave(&vip->lock, flags);
 
@@ -244,12 +252,24 @@ out:
 	spin_unlock_irqrestore(&vip->lock, flags);
 }
 
-/* Take the lock: iget runs concurrently with the ioctl/unlink mutators. */
+/*
+ * Returns whether @ino is in the VIP set.
+ *
+ * Called from f2fs_iget(), which the mount path reaches for F2FS_META_INO and
+ * the quota inodes *before* f2fs_build_node_manager() has run, so sbi->nm_info
+ * is still NULL there. Guard for it, not only for safety: an unguarded
+ * sbi->nm_info->vip dereference panics during mount.
+ */
 bool f2fs_is_vip_inode(struct f2fs_sb_info *sbi, nid_t ino)
 {
-	struct f2fs_vip_manager *vip = &sbi->nm_info->vip;
+	struct f2fs_vip_manager *vip;
 	unsigned long flags;
 	bool found;
+
+	if (!sbi->nm_info || !sbi->nm_info->vip.sorted)
+		return false;
+
+	vip = &sbi->nm_info->vip;
 
 	spin_lock_irqsave(&vip->lock, flags);
 	f2fs_vip_bsearch(sbi->nm_info, ino, &found);

@@ -1231,6 +1231,8 @@ F2FS_SBI_GENERAL_RW_ATTR(reserved_pin_section);
 static ssize_t vip_file_enable_show(struct f2fs_attr *a,
 				    struct f2fs_sb_info *sbi, char *buf)
 {
+	if (!sbi->nm_info)
+		return -ENODEV;
 	return sysfs_emit(buf, "%u\n", sbi->nm_info->vip.enabled);
 }
 
@@ -1240,6 +1242,9 @@ static ssize_t vip_file_enable_store(struct f2fs_attr *a,
 {
 	unsigned int t;
 	int ret;
+
+	if (!sbi->nm_info)
+		return -ENODEV;
 
 	ret = kstrtouint(skip_spaces(buf), 0, &t);
 	if (ret)

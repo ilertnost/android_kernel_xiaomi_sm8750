@@ -634,6 +634,15 @@ make_now:
 	}
 	f2fs_set_inode_flags(inode);
 
+#ifdef CONFIG_F2FS_VIP_FILE
+	/*
+	 * f2fs_iget -> f2fs_vip_bsearch in the HyperOS 4 binary: stamp the inode
+	 * so the GC treats it as protected from relocation.
+	 */
+	if (f2fs_is_vip_inode(sbi, ino))
+		set_inode_flag(inode, FI_VIP);
+#endif
+
 	unlock_new_inode(inode);
 	trace_f2fs_iget(inode);
 	return inode;

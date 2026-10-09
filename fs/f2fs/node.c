@@ -3309,6 +3309,14 @@ static int init_free_nid_cache(struct f2fs_sb_info *sbi)
 			      GFP_KERNEL);
 	if (!nm_i->free_nid_count)
 		return -ENOMEM;
+#ifdef CONFIG_F2FS_VIP_FILE
+	{
+		int ret = f2fs_vip_init(nm_i);
+
+		if (ret)
+			return ret;
+	}
+#endif
 	return 0;
 }
 
@@ -3404,6 +3412,9 @@ void f2fs_destroy_node_manager(struct f2fs_sb_info *sbi)
 		kvfree(nm_i->free_nid_bitmap);
 	}
 	kvfree(nm_i->free_nid_count);
+#ifdef CONFIG_F2FS_VIP_FILE
+	f2fs_vip_destroy(nm_i);
+#endif
 
 	kvfree(nm_i->nat_bitmap);
 	kvfree(nm_i->nat_bits);

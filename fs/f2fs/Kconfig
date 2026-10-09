@@ -145,6 +145,21 @@ config F2FS_IOSTAT
 	  IO statistics tracepoint events. You have to turn on "iostat_enable"
 	  sysfs node to enable this feature.
 
+config F2FS_VIP_FILE
+	bool "F2FS VIP file support"
+	depends on F2FS_FS
+	help
+	  Maintain a set of "VIP" inodes in the node manager. VIP inodes are
+	  reported on f2fs_iget() through F2FS_I()/set_inode_flag(FI_VIP) and are
+	  protected from GC relocation, so their data stays where it was written.
+
+	  The set is indexed by nid: a sorted array for binary search plus an
+	  unsorted ring buffer that is merged into the sorted array when it fills
+	  up. Entries are added by F2FS_IOC_SET_PIN_FILE and removed on unlink.
+
+	  Ported from the HyperOS 4 kernel (F2FS_VIP_FILE, active there with
+	  vip_file_enable=1, gc_pin_file_thresh=2048, reserved_pin_section=512).
+
 config F2FS_UNFAIR_RWSEM
 	bool "F2FS unfair rw_semaphore"
 	depends on F2FS_FS && BLK_CGROUP

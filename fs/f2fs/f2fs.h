@@ -852,6 +852,9 @@ enum {
 	FI_ATOMIC_REPLACE,	/* indicate atomic replace */
 	FI_OPENED_FILE,		/* indicate file has been opened */
 	FI_DONATE_FINISHED,	/* indicate page donation of file has been finished */
+#ifdef CONFIG_F2FS_VIP_FILE
+	FI_VIP,			/* indicate inode is in the VIP set (protected from GC) */
+#endif
 	FI_MAX,			/* max flag, never be used */
 };
 
@@ -978,6 +981,56 @@ enum nat_state {
 	MAX_NAT_STATE,
 };
 
+#ifdef CONFIG_F2FS_VIP_FILE
+/*
+ * VIP inode set, ported from the HyperOS 4 kernel (CONFIG_F2FS_VIP_FILE).
+ *
+ * Layout matches the HyperOS 4 binary exactly (from its BTF), so the on-disk
+ * and in-memory contracts stay compatible:
+ *
+ *   struct f2fs_vip_manager       -- 48 bytes, f2fs_nm_info.vip at +376
+ *   struct vip_inode_sorted       --  8 bytes { nid, unsorted_idx }
+ *   struct vip_inode_unsorted     --  4 bytes { nid }
+ *
+ * Two containers are kept:
+ *   - sorted[]   : sorted by nid, binary-searchable, length = count
+ *   - unsorted[] : a ring buffer indexed by head/tail, length = unsorted_count
+ *
+ * unsorted_buf_size is the ring capacity. When the ring is full, its contents
+ * are merged into sorted[] and the ring is reset. sorted[] grows by doubling.
+ */
+struct vip_inode_sorted {
+	nid_t ino;			/* inode number */
+	unsigned int unsorted_idx;	/* index in the unsorted ring */
+};
+
+struct vip_inode_unsorted {
+	nid_t ino;			/* inode number */
+};
+
+struct f2fs_vip_manager {
+	struct vip_inode_sorted *sorted;	/* sorted by ino */
+	struct vip_inode_unsorted *unsorted;	/* ring buffer */
+	unsigned int count;		/* # entries in sorted[] */
+	unsigned int capacity;		/* allocated size of sorted[] */
+	unsigned int unsorted_buf_size;	/* capacity of unsorted[] */
+	unsigned int unsorted_head;	/* ring head */
+	unsigned int unsorted_tail;	/* ring tail */
+	spinlock_t lock;		/* protects all of the above */
+	unsigned int enabled;		/* mirrored from sysfs vip_file_enable */
+};
+
+#define F2FS_VIP_SORTED_MIN		8
+#define F2FS_VIP_UNSORTED_MIN		16
+
+static inline unsigned int f2fs_vip_unsorted_count(struct f2fs_vip_manager *vip)
+{
+	if (vip->unsorted_tail >= vip->unsorted_head)
+		return vip->unsorted_tail - vip->unsorted_head;
+	return vip->unsorted_buf_size - vip->unsorted_head + vip->unsorted_tail;
+}
+#endif
+
 struct f2fs_nm_info {
 	block_t nat_blkaddr;		/* base disk address of NAT */
 	nid_t max_nid;			/* maximum possible node ids */
@@ -1018,6 +1071,13 @@ struct f2fs_nm_info {
 	char *nat_bitmap_mir;		/* NAT bitmap mirror */
 #endif
 	int bitmap_size;		/* bitmap size */
+#ifdef CONFIG_F2FS_VIP_FILE
+	/*
+	 * VIP inode set (ported from HyperOS 4, F2FS_VIP_FILE).
+	 * See fs/f2fs/vip.c for the invariants.
+	 */
+	struct f2fs_vip_manager vip;
+#endif
 };
 
 /*
@@ -3835,6 +3895,16 @@ int f2fs_restore_node_summary(struct f2fs_sb_info *sbi,
 int f2fs_flush_nat_entries(struct f2fs_sb_info *sbi, struct cp_control *cpc);
 int f2fs_build_node_manager(struct f2fs_sb_info *sbi);
 void f2fs_destroy_node_manager(struct f2fs_sb_info *sbi);
+#ifdef CONFIG_F2FS_VIP_FILE
+/* fs/f2fs/vip.c */
+int f2fs_vip_init(struct f2fs_nm_info *nm_i);
+void f2fs_vip_destroy(struct f2fs_nm_info *nm_i);
+unsigned int f2fs_vip_bsearch(struct f2fs_nm_info *nm_i, nid_t ino,
+				bool *found);
+int f2fs_vip_insert(struct f2fs_sb_info *sbi, nid_t ino);
+void f2fs_vip_remove(struct f2fs_sb_info *sbi, nid_t ino);
+bool f2fs_is_vip_inode(struct f2fs_sb_info *sbi, nid_t ino);
+#endif
 int __init f2fs_create_node_manager_caches(void);
 void f2fs_destroy_node_manager_caches(void);
 

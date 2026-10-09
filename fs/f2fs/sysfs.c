@@ -1227,6 +1227,41 @@ F2FS_SBI_GENERAL_RW_ATTR(blkzone_alloc_policy);
 #endif
 F2FS_SBI_GENERAL_RW_ATTR(carve_out);
 F2FS_SBI_GENERAL_RW_ATTR(reserved_pin_section);
+#ifdef CONFIG_F2FS_VIP_FILE
+static ssize_t vip_file_enable_show(struct f2fs_attr *a,
+				    struct f2fs_sb_info *sbi, char *buf)
+{
+	return sysfs_emit(buf, "%u\n", sbi->nm_info->vip.enabled);
+}
+
+static ssize_t vip_file_enable_store(struct f2fs_attr *a,
+				     struct f2fs_sb_info *sbi,
+				     const char *buf, size_t count)
+{
+	unsigned int t;
+	int ret;
+
+	ret = kstrtouint(skip_spaces(buf), 0, &t);
+	if (ret)
+		return ret;
+
+	if (t > 1)
+		return -EINVAL;
+
+	spin_lock(&sbi->nm_info->vip.lock);
+	sbi->nm_info->vip.enabled = t;
+	spin_unlock(&sbi->nm_info->vip.lock);
+
+	return count;
+}
+
+/* sbi is recovered from the kobject, so no offset/size is needed here. */
+static struct f2fs_attr f2fs_attr_vip_file_enable = {
+	.attr = {.name = "vip_file_enable", .mode = 0644 },
+	.show	= vip_file_enable_show,
+	.store	= vip_file_enable_store,
+};
+#endif
 F2FS_SBI_GENERAL_RW_ATTR(max_lock_elapsed_time);
 F2FS_SBI_GENERAL_RW_ATTR(lock_duration_priority);
 F2FS_SBI_GENERAL_RW_ATTR(adjust_lock_priority);
@@ -1427,6 +1462,9 @@ static struct attribute *f2fs_attrs[] = {
 	ATTR_LIST(max_read_extent_count),
 	ATTR_LIST(carve_out),
 	ATTR_LIST(reserved_pin_section),
+#ifdef CONFIG_F2FS_VIP_FILE
+	ATTR_LIST(vip_file_enable),
+#endif
 	ATTR_LIST(max_lock_elapsed_time),
 	ATTR_LIST(lock_duration_priority),
 	ATTR_LIST(adjust_lock_priority),

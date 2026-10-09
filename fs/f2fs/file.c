@@ -3530,6 +3530,14 @@ static int f2fs_ioc_set_pin_file(struct file *filp, unsigned long arg)
 	}
 
 	set_inode_flag(inode, FI_PIN_FILE);
+#ifdef CONFIG_F2FS_VIP_FILE
+	/*
+	 * __f2fs_ioctl+0xb68 -> f2fs_vip_insert in the HyperOS 4 binary:
+	 * F2FS_IOC_SET_PIN_FILE is what adds an nid to the VIP set.
+	 */
+	if (f2fs_vip_insert(sbi, inode->i_ino) < 0)
+		f2fs_warn(sbi, "vip: failed to add ino %lu", inode->i_ino);
+#endif
 	ret = F2FS_I(inode)->i_gc_failures;
 done:
 	f2fs_update_time(sbi, REQ_TIME);
